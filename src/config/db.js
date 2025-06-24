@@ -46,8 +46,16 @@ function getMenusCollection(){
   return db.collection("menus");
 }
 
+function getReviewsCollection(){
+  if (!db) {
+    throw new Error("Database not connected. Call connectToDatabase() first.");
+  }
+  return db.collection("reviews");
+}
+
 module.exports = {
   connectToDatabase,
   getServicesCollection,
-  getMenusCollection
+  getMenusCollection,
+  getReviewsCollection
 };

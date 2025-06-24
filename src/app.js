@@ -8,6 +8,7 @@ require('express-async-errors');
 // const rateLimiter = require('./middleware/rateLimitter')
 const serviceRoutes = require('./routes/services.routes');
 const menuRoutes = require('./routes/menus.routes');
+const reviewRouter = require('./routes/reviews.router')
 
 const app = express();
 
@@ -22,6 +23,7 @@ app.use(express.json());
 // ⚡ Option 1: Apply cache to all GET routes under /api/v1
 app.use('/services', serviceRoutes);
 app.use('/menu', menuRoutes);
+app.use('/reviews', reviewRouter)
 
 // app.use('/api/v1', routes);
 // app.use(errorHandler); // Custom error handling middleware
