@@ -4,6 +4,7 @@ const app = require('./app');
 const { redisClient } = require('./config/redisClient');
 const { connectRabbitMQ } = require('./utils/rabbitmq');
 const { connectToDatabase } = require('./config/db');
+const { syncServices } = require('./utils/syncServices');
 // const { consumePaymentSuccess } = require('./consumers/payment.consumer');
 
 const PORT = process.env.PORT || 3000;
@@ -12,6 +13,7 @@ const server = http.createServer(app);
 
 (async () => {
   await connectToDatabase();
+  await syncServices()
   await connectRabbitMQ();
   // await consumePaymentSuccess()
 
