@@ -33,110 +33,6 @@ exports.createService = async (serviceData) => {
   }
 };
 
-// exports.fetchService = async (queryParams) => {
-//   const {
-//       q,
-//       category,
-//       location,
-//       minPrice,
-//       maxPrice,
-//       sortBy = 'createdAt',
-//       sortOrder = 'desc',
-//       page = 1,
-//       limit = 10,
-//       lat,
-//       lng,
-//       radius = 10000
-//   } = queryParams;
-
-//   try {
-//       // 🔐 Create cache key
-//       const cacheKey = crypto
-//           .createHash('md5')
-//           .update(JSON.stringify(queryParams))
-//           .digest('hex');
-
-//       // ⚡ Check Redis cache
-//       const cached = await redisClient.get(cacheKey);
-//       if (cached) {
-//           return JSON.parse(cached);
-//       }
-
-//       const services = getServicesCollection();
-
-//       let query = {};
-//       let projection = {};
-//       let sortOptions = {};
-
-//       // 📝 Text search
-//       if (q) {
-//           query.$text = { $search: q };
-//           projection = { score: { $meta: 'textScore' } };
-//           sortOptions = { score: { $meta: 'textScore' } };
-//       } else {
-//           sortOptions[sortBy] = sortOrder === 'asc' ? 1 : -1;
-//       }
-
-//       // 📂 Category filter
-//       if (category) {
-//           query.category = category;
-//       }
-
-//       // 🧭 Location filter (by state)
-//       if (location) {
-//           query["location.state"] = location;
-//       }
-
-//       // 💰 Price filter
-//       if (minPrice || maxPrice) {
-//           query.price = {};
-//           if (minPrice) query.price.$gte = parseFloat(minPrice);
-//           if (maxPrice) query.price.$lte = parseFloat(maxPrice);
-//       }
-
-//       // 📍 Geospatial filter
-//       if (lat && lng) {
-//           query["location.coordinates"] = {
-//               $near: {
-//                   $geometry: {
-//                       type: "Point",
-//                       coordinates: [parseFloat(lng), parseFloat(lat)]
-//                   },
-//                   $maxDistance: parseInt(radius),
-//                   $minDistance: 0
-//               }
-//           };
-//       }
-
-//       // 📄 Pagination
-//       const skip = (parseInt(page) - 1) * parseInt(limit);
-
-//       // 🔎 Run query
-//       const cursor = services.find(query, { projection })
-//           .sort(sortOptions)
-//           .skip(skip)
-//           .limit(parseInt(limit));
-
-//       const results = await cursor.toArray();
-//       const total = await services.countDocuments(query);
-
-//       const responseData = {
-//           total,
-//           page: parseInt(page),
-//           limit: parseInt(limit),
-//           results
-//       };
-
-//       // 📦 Cache the response for 5 minutes
-//       await redisClient.setEx(cacheKey, 300, JSON.stringify(responseData));
-
-//       return responseData;
-//   } catch (error) {
-//       console.error("❌ fetchService error:", error);
-//       throw new Error("Internal server error");
-//   }
-// };
-
 exports.fetchService = async (queryParams) => {
   const {
     q,
@@ -240,5 +136,109 @@ exports.fetchService = async (queryParams) => {
   } catch (error) {
     console.error("❌ fetchService error:", error);
     throw new Error("Internal server error");
+  }
+};
+
+exports.fetchLatestService = async () => {
+  try {
+    const index = meiliClient.index("services");
+    const result = await index.search("", {
+      sort: ["createdAt:desc"],
+      limit: 5,
+    });
+    const responseData = {
+      results: result.hits,
+    };
+    return responseData;
+  } catch (error) {
+    console.error("Error fetching latest service:", error);
+    throw { status: 500, message: "Internal server error" };
+  }
+};
+
+exports.fetchServiceById = async (serviceId) => {
+  try {
+    const services = getServicesCollection();
+
+    const service = await services.findOne({ serviceId });
+    if (!service) throw new Error("Service not found");
+
+    // Increment view count
+    const updatedService = await services.findOneAndUpdate(
+      { serviceId },
+      { $inc: { views: 1 } },
+      { returnDocument: "after" }
+    );
+
+    // Recalculate popularityScore (simple version)
+    const views = updatedService.views || 0;
+    const bookings = updatedService.confirmedBookingCount || 0;
+    const ratings = updatedService.ratings || 0;
+
+    const popularityScore = views * 0.5 + bookings * 2 + ratings * 5;
+
+    // Update popularityScore in MongoDB
+    await services.updateOne({ serviceId }, { $set: { popularityScore } });
+
+    // Sync with Meilisearch
+    const index = meiliClient.index("services");
+    await index.addDocuments([
+      {
+        ...updatedService,
+        id: updatedService._id.toString(),
+        popularityScore,
+      },
+    ]);
+
+    return updatedService;
+  } catch (er) {
+    console.error("Error fetching latest service:", er);
+    throw { status: 500, message: "Internal server error" };
+  }
+};
+
+exports.fetchPopularService = async (body) => {
+  try {
+    const { limit = 10, category, location } = body;
+
+    const index = meiliClient.index("services");
+
+    const filters = [];
+    if (category) filters.push(`category = "${category}"`);
+    if (location) filters.push(`location.state = "${location}"`);
+
+    const result = await index.search("", {
+      filter: filters.length ? filters : undefined,
+      sort: ["popularityScore:desc"],
+      limit,
+    });
+
+    const responseData = {
+      total: result.estimatedTotalHits,
+      results: result.hits,
+    };
+
+    return responseData;
+  } catch (er) {
+    console.error("Error fetching latest service:", er);
+    throw { status: 500, message: "Internal server error" };
+  }
+};
+
+exports.fetctServicesCatagories = async () => {
+  try {
+    const services = getServicesCollection();
+    const categories = await services
+      .find({}, { projection: { category: 1, _id: 0 } })
+      .toArray();
+    const categorySet = new Set(categories.map((doc) => doc.category));
+    const responseData = {
+      total: categorySet.size,
+      results: Array.from(categorySet),
+    };
+    return responseData;
+  } catch (er) {
+    console.error("Error fetching latest service:", er);
+    throw { status: 500, message: "Internal server error" };
   }
 };

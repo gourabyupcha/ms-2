@@ -69,7 +69,7 @@ exports.syncServices = async () => {
 
     // Configure sortable attributes
     // console.log("🔧 Configuring sortable attributes...");
-    await index.updateSortableAttributes(["createdAt", "price"]);
+    await index.updateSortableAttributes(["createdAt", "price", "popularityScore"]);
 
     // Clear existing documents (optional - remove if you want to keep existing)
     // console.log("🗑️ Clearing existing documents...");

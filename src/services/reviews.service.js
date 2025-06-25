@@ -4,9 +4,9 @@ exports.patchReview = async (data) => {
   const servicesCollection = await getServicesCollection();
   const reviewsCollection = await getReviewsCollection();
 
-  const { serviceId, userId, rating, comment } = data;
+  const { serviceId, userId, userRating, comment } = data;
 
-  if (!serviceId || !userId || typeof rating !== 'number') {
+  if (!serviceId || !userId || typeof userRating !== 'number') {
     throw new Error('Missing or invalid fields');
   }
 
@@ -23,7 +23,7 @@ exports.patchReview = async (data) => {
   const review = {
     serviceId,              // <-- This is the user-provided string
     userId: userId,
-    rating,
+    userRating,
     comment,
     createdAt: new Date()
   };
@@ -36,7 +36,7 @@ exports.patchReview = async (data) => {
     {
       $group: {
         _id: '$serviceId',
-        averageRating: { $avg: '$rating' },
+        rating: { $avg: '$userRating' },
         reviewCount: { $sum: 1 }
       }
     }
@@ -46,15 +46,15 @@ exports.patchReview = async (data) => {
     throw new Error('Failed to calculate review stats.');
   }
 
-  let { averageRating, reviewCount } = aggregation[0];
-  averageRating = Math.round(averageRating * 10) / 10  
+  let { rating, reviewCount } = aggregation[0];
+  rating = Math.round(rating * 10) / 10  
 
   // Step 4: Update the service document (found by serviceId)
   await servicesCollection.updateOne(
     { serviceId },
     {
       $set: {
-        averageRating,
+        rating,
         reviewCount
       }
     }
